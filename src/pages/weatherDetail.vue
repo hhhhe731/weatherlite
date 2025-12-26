@@ -19,6 +19,17 @@
           >
             {{ isCityCollected ? '已收藏' : '收藏' }}
           </el-button>
+
+          <el-button 
+            type="text" 
+            :icon="isCityInHome ? CircleClose : CirclePlus" 
+            @click="toggleHomeDisplay"
+            class="home-btn"
+            :class="{ 'in-home': isCityInHome }"
+          >
+            {{ isCityInHome ? '已添加到首页' : '添加到首页' }}
+          </el-button>
+
           <el-select v-model="temperatureUnit" class="unit-select" size="small">
             <el-option label="°C 摄氏度" value="celsius" />
             <el-option label="°F 华氏度" value="fahrenheit" />
@@ -37,6 +48,12 @@
               <el-icon><StarFilled /></el-icon>
               <span>已收藏</span>
             </div>
+
+            <div class="home-badge" v-if="isCityInHome">
+              <el-icon><House /></el-icon>
+              <span>首页展示</span>
+            </div>
+
           </div>
           <div class="update-info">
             <el-icon><Clock /></el-icon>
@@ -134,7 +151,10 @@ import {
   InfoFilled,
   Clock,
   Star,
-  StarFilled
+  StarFilled,
+  CirclePlus,  // 新增
+  CircleClose, // 新增
+  House
 } from '@element-plus/icons-vue'
 import { ElButton, ElIcon, ElSelect, ElOption, ElMessage } from 'element-plus'
 
@@ -146,6 +166,12 @@ const cityData = ref(null)
 const updateTime = ref('')
 const temperatureUnit = ref('celsius')
 const collectedCities = ref([]) // 存储收藏的城市列表
+const homeCities = ref([])
+
+// 计算当前城市是否已在首页展示
+const isCityInHome = computed(() => {
+  return cityData.value ? homeCities.value.some(city => city.name === cityData.value.city) : false
+})
 
 // 计算当前城市是否已被收藏
 const isCityCollected = computed(() => {
@@ -157,6 +183,12 @@ onMounted(() => {
   const saved = localStorage.getItem('weatherCollectedCities')
   if (saved) {
     collectedCities.value = JSON.parse(saved)
+  }
+
+  // 从localStorage加载首页展示的城市列表
+  const savedHomeCities = localStorage.getItem('weatherHomeCities')
+  if (savedHomeCities) {
+    homeCities.value = JSON.parse(savedHomeCities)
   }
   
   if (route.query.city) {
@@ -179,7 +211,62 @@ onMounted(() => {
       router.back()
     }, 1500)
   }
+  window.addEventListener('homeCitiesChanged', refreshHomeCities)
 })
+
+// 添加刷新函数
+const refreshHomeCities = () => {
+  const savedHome = localStorage.getItem('weatherHomeCities')
+  if (savedHome) {
+    try {
+      homeCities.value = JSON.parse(savedHome)
+    } catch (e) {
+      homeCities.value = []
+    }
+  } else {
+    homeCities.value = []
+  }
+}
+
+
+
+
+// 新增：添加到首页/从首页移除功能
+const toggleHomeDisplay = () => {
+  if (!cityData.value) return
+  
+  // 从 localStorage 加载现有数据
+  const savedHomeCities = localStorage.getItem('weatherHomeCities')
+  let currentHomeCities = savedHomeCities ? JSON.parse(savedHomeCities) : []  // 这里定义 currentHomeCities
+  
+  const cityInfo = {
+    city: cityData.value.city,
+    condition: cityData.value.condition,
+    temperature: cityData.value.temperature,
+    humidity: cityData.value.humidity || '65%',
+    windSpeed: cityData.value.windSpeed || '3级',
+    feelsLike: cityData.value.feelsLike || cityData.value.temperature,
+    aqi: cityData.value.aqi || '良'
+  }
+  
+  const index = currentHomeCities.findIndex(city => city.city === cityInfo.city)
+  
+  if (index !== -1) {
+    // 如果已在首页，则移除
+    currentHomeCities.splice(index, 1)
+    ElMessage.info(`已将 ${cityInfo.city} 从首页移除`)
+  } else {
+    // 如果不在首页，则添加到首页
+    currentHomeCities.push(cityInfo)
+    ElMessage.success(`已将 ${cityInfo.city} 添加到首页`)
+  }
+  
+  // 保存到localStorage
+  localStorage.setItem('weatherHomeCities', JSON.stringify(currentHomeCities))
+  
+  // 更新本地响应式数据
+  homeCities.value = currentHomeCities
+}
 
 // 收藏/取消收藏功能
 const toggleCollect = () => {
@@ -260,6 +347,35 @@ const getSuggestion = (condition) => {
 </script>
 
 <style scoped>
+/* 新增样式 */
+.home-btn {
+  transition: all 0.3s;
+}
+
+.home-btn.in-home {
+  color: #67c23a;
+}
+
+.home-btn:hover {
+  color: #67c23a;
+}
+
+.home-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: #f0f9eb;
+  border: 1px solid #67c23a;
+  border-radius: 12px;
+  font-size: 12px;
+  color: #67c23a;
+}
+
+.home-badge .el-icon {
+  font-size: 12px;
+}
+
 .weather-detail-page {
   padding: 20px;
   background: #f5f7fa;

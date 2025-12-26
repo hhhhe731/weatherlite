@@ -30,6 +30,16 @@
         <div class="card-header">
           <el-icon class="location-icon"><Location /></el-icon>
           <span class="city-name">{{ city.city }}</span>
+
+          <!-- 新增：删除按钮 -->
+          <el-icon 
+            class="delete-icon"
+            @click.stop="removeFromHome(city.city)"
+            v-if="isInHomeCities(city.city)"
+          >
+            <Close />
+          </el-icon>
+
           <el-icon 
             class="collect-icon" 
             :class="{ collected: isCollected(city.city) }"
@@ -135,11 +145,36 @@ const updateTime = ref('')
 const temperatureUnit = ref('celsius')
 const refreshing = ref(false)
 const collectedCities = ref([])
+const homeCities = ref([]) // 新增：首页展示的城市列表
 const collectVisible = ref(false)
 
 // 计算属性
 const displayWeather = computed(() => {
-  return props.weatherData.length > 0 ? props.weatherData : defaultWeather.value
+  // 基础数据：props中的数据或默认数据
+  const baseData = props.weatherData.length > 0 ? props.weatherData : defaultWeather.value
+  
+  // 从 localStorage 读取用户添加的城市
+  const savedHome = localStorage.getItem('weatherHomeCities')
+  const userCities = savedHome ? JSON.parse(savedHome) : []
+  // 合并数据：用户添加的城市 + 基础数据
+  const combinedCities = [...userCities]
+  
+  // 添加基础数据中没有的城市（去重）
+  baseData.forEach(city => {
+    if (!combinedCities.some(c => c.city === city.city || c.name === city.city)) {
+      combinedCities.push({
+        city: city.city,
+        condition: city.condition,
+        temperature: city.temperature,
+        humidity: city.humidity,
+        windSpeed: city.windSpeed,
+        feelsLike: city.feelsLike,
+        aqi: city.aqi
+      })
+    }
+  })
+  
+  return combinedCities
 })
 
 // 初始化
@@ -151,6 +186,20 @@ onMounted(() => {
   
   const saved = localStorage.getItem('weatherCollectedCities')
   if (saved) collectedCities.value = JSON.parse(saved)
+
+  // 加载首页展示城市
+  const savedHome = localStorage.getItem('weatherHomeCities')
+  if (savedHome) {
+    try {
+      homeCities.value = JSON.parse(savedHome)
+    } catch (e) {
+      homeCities.value = []
+      console.error('加载用户添加的城市数据失败:', e)
+    }
+  }
+  
+  // 监听自定义事件
+  window.addEventListener('homeCitiesChanged', refreshHomeCities)
   
   watch(() => props.weatherData, () => {
     updateTime.value = new Date().toLocaleTimeString([], { 
@@ -159,6 +208,45 @@ onMounted(() => {
     })
   })
 })
+
+// 添加刷新函数
+const refreshHomeCities = () => {
+  const savedHome = localStorage.getItem('weatherHomeCities')
+  if (savedHome) {
+    try {
+      homeCities.value = JSON.parse(savedHome)
+    } catch (e) {
+      homeCities.value = []
+    }
+  } else {
+    homeCities.value = []
+  }
+}
+
+
+// 新增：判断城市是否在首页展示列表中
+const isInHomeCities = (cityName) => {
+  const savedHome = localStorage.getItem('weatherHomeCities')
+  if (!savedHome) return false
+  
+  const userCities = JSON.parse(savedHome)
+  return userCities.some(city => city.city === cityName)
+}
+
+// 新增：从首页移除城市
+const removeFromHome = (cityName) => {
+  const savedHome = localStorage.getItem('weatherHomeCities')
+  if (!savedHome) return
+  
+  const userCities = JSON.parse(savedHome)
+  const index = userCities.findIndex(city => city.city === cityName)
+  
+  if (index !== -1) {
+    userCities.splice(index, 1)
+    localStorage.setItem('weatherHomeCities', JSON.stringify(userCities))
+    ElMessage.info(`已将 ${cityName} 从首页移除`)
+  }
+}
 
 // 核心功能
 const handleUnitChange = () => {
@@ -312,6 +400,49 @@ const showWeatherDetail = (city) => {
 </script>
 
 <style scoped>
+/* 新增删除按钮样式 */
+.delete-icon {
+  color: #f56c6c;
+  cursor: pointer;
+  margin-right: 8px;
+}
+
+.delete-icon:hover {
+  color: #f78989;
+}
+
+/* 调整卡片头部布局 */
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.location-icon {
+  color: #1890ff;
+}
+
+.city-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  flex: 1;
+  text-align: center;
+  margin: 0 8px;
+}
+
+.collect-icon {
+  color: #c0c4cc;
+  cursor: pointer;
+}
+
+.collect-icon.collected {
+  color: #faad14;
+}
+
 .weather-container {
   padding: 20px;
 }
